@@ -7,12 +7,14 @@ from threading import Thread
 
 
 class LiteNetClient:
-    def __init__(self, ip, port=5050, header=64, encoding="utf-8", debug=False, encrypt=True):
-        self.ip, self.port = ip, port
+    def __init__(self, ip, password, port=5050, header=64, encoding="utf-8", debug=False, encrypt=True):
+        self.ip, self.port, self.password = ip, port, password
 
         self.header, self.encoding = header, encoding
 
         self._close_msg = "[CLOSE]"
+
+        self._login_msg = "[LOGIN]"
 
         socket.setdefaulttimeout(5)
 
@@ -24,8 +26,10 @@ class LiteNetClient:
 
         self._temp = None
 
+        self.cipher = False
+
     def start(self):
-        Thread(target=self._start).start()
+        Thread(target=self._start(self.password)).start()
 
     def message(self):
         message = input("std::You >> ")
@@ -67,11 +71,14 @@ class LiteNetClient:
         if self.debug:
             print("[DEBUG] Message Sent")
 
-    def _start(self):
+    def _start(self, password):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         self.socket.connect((self.ip, self.port))
         print(f"Connected to {self.ip}:{self.port}")
+
+        login_msg = str(self._login_msg + " " + password).encode(self.encoding)
+        self.send(login_msg)
 
         if self.encrypt:
             self.cipher = clientutils.getcipher('key.txt')

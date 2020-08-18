@@ -21,6 +21,7 @@ def server(host, port, header, debug, encrypt):
 
 @click.command(help="Launch the LiteNet Client")
 @click.option("-h", "--host", required=True, type=str, help="The ip the server's running on. (Must have access to it.)")
+@click.option("--password", "password", required=True, type=str, help="Your LiteNet password (Required for access.)")
 @click.option("-p", "--port", default=5050, type=int, help="The port the server's running on. (Must be a valid port.)")
 @click.option("--header", "header", default=64, type=int, help="The size of the server message header. (Must match the server's.)")
 @click.option("-d", "--debug", is_flag=True, help="Enters debug mode.")

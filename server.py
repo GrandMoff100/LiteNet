@@ -3,7 +3,7 @@ import threading
 import time
 from cryptography.fernet import Fernet, InvalidToken
 
-from litenet.utils import to_liteaddr, get_addr_cipher
+from litenet.utils import to_liteaddr, get_addr_cipher, valid_login
 
 
 class LiteNetServer:
@@ -13,6 +13,8 @@ class LiteNetServer:
         self.header, self.encoding = header, encoding
 
         self._close_msg = "[CLOSE]"
+
+        self._login_msg = "[LOGIN]"
 
         self.clients = {}
 
@@ -50,7 +52,8 @@ class LiteNetServer:
         self.clients[addr] = {
             "alias": to_liteaddr(addr),
             "connection": conn,
-            "alive": True
+            "alive": True,
+            "verified": False
         }
 
         while self.clients[addr]["alive"]:
@@ -58,7 +61,7 @@ class LiteNetServer:
                 msg_length = self.clients[addr]["connection"].recv(self.header)
             except OSError:
                 print(f"One connection has been closed by {addr[0]}:{addr[1]}")
-                input("Continue?")
+                input("Press enter to continue")
                 break
 
             if msg_length:
@@ -67,39 +70,55 @@ class LiteNetServer:
                 msg = self.clients[addr]["connection"].recv(msg_length)
 
                 if self.encrypt:
-                    user_addr = to_liteaddr(addr[0]) 
+                    user_addr = to_liteaddr(addr) 
                     cipher = get_addr_cipher(user_addr, 'keys.json')
                     if cipher:
                         try:
                             msg = cipher.decrypt(msg)
                         except InvalidToken:
                             pass
-                msg = msg.decode(self.encoding)               
+                msg = msg.decode(self.encoding)
+
+                if msg[0:len(self._login_msg)] == self._login_msg:
+                    alias = self.clients[addr]['alias']
+                    password = msg.split()[1]
+                    if valid_login(alias, password, 'users.json'):
+                        self.clients[addr]['verified'] = True
 
 
                 if msg == self._close_msg:
                     break
 
-                print(addr[0] + ":" + str(addr[1]), ">>", msg)
+                if self.clients[addr]['verified']:
+                    print(addr[0] + ":" + str(addr[1]), ">>", msg)
 
-                msg = str(f"{to_liteaddr(addr[0]) + ':' + str(addr[1])} >> {msg}")
+                    msg = str(f"{to_liteaddr(addr[0:1]) + ':' + str(addr[2:3])} >> {msg}")
 
-                for client in self.clients.keys():
-                    if client != addr:
-                        if self.clients[client]["alive"]:
-                            if self.debug:
-                                print("Msg Len:", len(msg.encode(self.encoding)))
-                            self.clients.get(client)["connection"].send(
-                                str(len(msg.encode(self.encoding))).encode(self.encoding) + b" " * (self.header - len(msg.encode(self.encoding)))
-                            )
+                    for client in self.clients.keys():
+                        if client != addr:
+                            if self.clients[client]["alive"] and self.clients[client]["verified"]:
+                                if self.debug:
+                                    print("Msg Len:", len(msg.encode(self.encoding)))
+                                
+                                if self.encrypt:
+                                    user_addr = to_liteaddr(addr)
+                                    cipher = get_addr_cipher(user_addr, 'keys.json')
+                                    if cipher:
+                                        msg = cipher.encrypt(msg.encode(self.encoding))
+                                    else:
+                                        msg = msg.encode(self.encoding)
+                            
+                                sending = str(len(msg))+ b" " * (self.header - len(msg))
 
-                            time.sleep(.3)
+                                self.clients.get(client)["connection"].send(sending)
 
-                            self.clients.get(client)["connection"].send(
-                                msg.encode(self.encoding)
-                            )
-                        else:
-                            print(addr, "is disconnected.")
+                                time.sleep(.3)
+
+                                self.clients.get(client)["connection"].send(
+                                    msg.encode(self.encoding)
+                                )
+                            else:
+                                print(addr, "is disconnected.")
 
         conn.close()
         self.close_client(addr)
@@ -107,6 +126,7 @@ class LiteNetServer:
     def close_client(self, addr):
         if addr in self.clients:
             self.clients[addr]["alive"] = False
+            self.clients[addr]["verified"] = False
         else:
             raise socket.error(f"{addr} isn't connected to the server.")
 
