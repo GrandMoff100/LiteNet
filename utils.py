@@ -1,5 +1,7 @@
 import json
+
 from cryptography.fernet import Fernet
+
 
 def to_liteaddr(ip):
     ip = ip[0].split(".")
@@ -14,6 +16,14 @@ def int_to_lite_num(number):
     lite_num = [(number - (number % base)) / base, number % base]
 
     return "".join([list(row)[int(digit) - 1] for digit in lite_num])
+
+
+def valid_login(liteaddr: str, password: str, users_json: str):
+    with open(users_json, 'r') as readfile:
+        users = json.load(readfile)
+    if (liteaddr in users.keys) and (users[liteaddr] == password):
+        return True
+    return False
 
 
 def get_addr_cipher(liteaddr: str, key_json: str):

@@ -3,7 +3,7 @@ import threading
 import time
 from cryptography.fernet import Fernet, InvalidToken
 
-from litenet.utils import to_liteaddr, get_addr_cipher, valid_login
+from utils import to_liteaddr, get_addr_cipher, valid_login
 
 
 class LiteNetServer:
