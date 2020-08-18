@@ -78,7 +78,10 @@ class LiteNetServer:
                 break
 
             if msg_length:
-                msg_length = int(msg_length.decode(self.encoding))
+                try:
+                    msg_length = int(msg_length.decode(self.encoding))
+                except ValueError:
+                    continue
 
                 msg = self.clients[addr]["connection"].recv(msg_length)
 
