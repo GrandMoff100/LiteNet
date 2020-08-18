@@ -1,6 +1,6 @@
 import click
-from litenet.server import LiteNetServer
-from litenet.client import LiteNetClient
+from server import LiteNetServer
+from client import LiteNetClient
 
 
 @click.group()
@@ -26,8 +26,8 @@ def server(host, port, header, debug, encrypt):
 @click.option("--header", "header", default=64, type=int, help="The size of the server message header. (Must match the server's.)")
 @click.option("-d", "--debug", is_flag=True, help="Enters debug mode.")
 @click.option("-e", "--encrypt", default=True, type=bool, help="Encrypt and decrypt messages")
-def client(host, port, header, debug, encrypt):
-    client = LiteNetClient(host, port, header, debug=debug)
+def client(host, password, port, header, debug, encrypt):
+    client = LiteNetClient(host, password, port, header, debug=debug, encrypt=encrypt)
     client.start()
 
 

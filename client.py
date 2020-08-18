@@ -2,7 +2,9 @@ import socket
 import keyboard
 import time
 import clientutils
+import sys
 
+from cryptography.fernet import Fernet, InvalidToken
 from threading import Thread
 
 
@@ -16,7 +18,7 @@ class LiteNetClient:
 
         self._login_msg = "[LOGIN]"
 
-        socket.setdefaulttimeout(5)
+        socket.setdefaulttimeout(0.5)
 
         keyboard.add_hotkey("t", self.message)
 
@@ -42,9 +44,14 @@ class LiteNetClient:
             if msg_length:
                 msg = self.socket.recv(int(msg_length))
 
-                if self.cipher:
-                    msg = self.cipher.decrypt(msg)
-
+                if self.cipher and self.encrypt:
+                    try:
+                        msg = self.cipher.decrypt(msg)
+                    except InvalidToken:
+                        pass
+                
+                if msg.decode('utf-8') == self._close_msg:
+                    self.disconnect(False)
                 return msg.decode(self.encoding)
 
             else:
@@ -56,12 +63,13 @@ class LiteNetClient:
         except socket.error:
             print("Server has closed connection your with the server.")
             time.sleep(2)
-            exit()
+            sys.exit()
+        
 
-    def send(self, msg):
+    def send(self, msg, encrypt=True):
         msg = msg.encode(self.encoding)
 
-        if self.cipher:
+        if self.cipher and self.encrypt and encrypt:
             msg = self.cipher.encrypt(msg)
 
         msg_length = len(msg)
@@ -74,22 +82,36 @@ class LiteNetClient:
     def _start(self, password):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        self.socket.connect((self.ip, self.port))
+        started = False
+        while not started:
+            try:
+                self.socket.connect((self.ip, self.port))
+                started = True
+            except OSError:
+                print("IP still in use - Please wait")
+                time.sleep(2)
+        
         print(f"Connected to {self.ip}:{self.port}")
 
-        login_msg = str(self._login_msg + " " + password).encode(self.encoding)
-        self.send(login_msg)
+        login_msg = str(self._login_msg + " " + password)
 
         if self.encrypt:
             self.cipher = clientutils.getcipher('key.txt')
         else:
             self.cipher = False
+        
+        self.send(login_msg)
 
         while True:
             server_msg = self.get_server_msg()
             if server_msg:
                 print(server_msg)
+            if server_msg == "Login Failed":
+                self.disconnect()
+                sys.exit()
+            self.message()
 
-    def disconnect(self):
-        self.send(self._close_msg)
+    def disconnect(self, send_close=True):
+        if send_close:
+            self.send(self._close_msg, False)
         self.socket.close()

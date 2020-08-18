@@ -1,8 +1,9 @@
 import socket
 import threading
 import time
-from cryptography.fernet import Fernet, InvalidToken
+import sys
 
+from cryptography.fernet import Fernet, InvalidToken
 from utils import to_liteaddr, get_addr_cipher, valid_login
 
 
@@ -27,10 +28,22 @@ class LiteNetServer:
         self._stopped = False
 
     def start(self):
-        threading.Thread(target=self._start).start()
+        try:
+            threading.Thread(target=self._start).start()
+        except KeyboardInterrupt:
+            self.stop()
+            sys.exit()
 
     def _start(self):
-        self.server.bind((self.ip, self.port))
+        started = False
+        while not started:
+            try:
+                self.server.bind((self.ip, self.port))
+                started = True
+            except OSError:
+                print("IP still in use - Please wait")
+                time.sleep(4)
+
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server.listen()
 
@@ -69,9 +82,12 @@ class LiteNetServer:
 
                 msg = self.clients[addr]["connection"].recv(msg_length)
 
+                if self.debug:
+                    print('Incoming message:', msg)
+
                 if self.encrypt:
                     user_addr = to_liteaddr(addr) 
-                    cipher = get_addr_cipher(user_addr, 'keys.json')
+                    cipher = get_addr_cipher(user_addr, 'client_keys.json')
                     if cipher:
                         try:
                             msg = cipher.decrypt(msg)
@@ -81,9 +97,10 @@ class LiteNetServer:
 
                 if msg[0:len(self._login_msg)] == self._login_msg:
                     alias = self.clients[addr]['alias']
-                    password = msg.split()[1]
+                    password = ' '.join(msg.split()[1:])
                     if valid_login(alias, password, 'users.json'):
                         self.clients[addr]['verified'] = True
+                        continue
 
 
                 if msg == self._close_msg:
@@ -95,20 +112,20 @@ class LiteNetServer:
                     msg = str(f"{to_liteaddr(addr[0:1]) + ':' + str(addr[2:3])} >> {msg}")
 
                     for client in self.clients.keys():
-                        if client != addr:
+                        if client == addr:
                             if self.clients[client]["alive"] and self.clients[client]["verified"]:
                                 if self.debug:
                                     print("Msg Len:", len(msg.encode(self.encoding)))
                                 
                                 if self.encrypt:
                                     user_addr = to_liteaddr(addr)
-                                    cipher = get_addr_cipher(user_addr, 'keys.json')
+                                    cipher = get_addr_cipher(user_addr, 'client_keys.json')
                                     if cipher:
                                         msg = cipher.encrypt(msg.encode(self.encoding))
                                     else:
                                         msg = msg.encode(self.encoding)
                             
-                                sending = str(len(msg))+ b" " * (self.header - len(msg))
+                                sending = str(len(msg)).encode(self.encoding) + b" " * (self.header - len(msg))
 
                                 self.clients.get(client)["connection"].send(sending)
 
@@ -119,6 +136,14 @@ class LiteNetServer:
                                 )
                             else:
                                 print(addr, "is disconnected.")
+                else:
+                    try:
+                        conn.send(b'12')
+                        time.sleep(0.3)
+                        conn.send(b"Login Failed")
+                    except (BrokenPipeError, ConnectionResetError):
+                        if self.debug:
+                            print(f"Failed Login by {to_liteaddr(addr)}")
 
         conn.close()
         self.close_client(addr)
@@ -135,4 +160,7 @@ class LiteNetServer:
         return threading.activeCount() - 2
 
     def stop(self):
+        for client in self.clients:
+            if client['alive']:
+                client['connection'].send(self._close_msg)
         self._stopped = True

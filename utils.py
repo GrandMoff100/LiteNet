@@ -21,13 +21,14 @@ def int_to_lite_num(number):
 def valid_login(liteaddr: str, password: str, users_json: str):
     with open(users_json, 'r') as readfile:
         users = json.load(readfile)
-    if (liteaddr in users.keys) and (users[liteaddr] == password):
+    if (liteaddr in list(users.keys())) and (users[liteaddr] == password):
         return True
-    return False
+    else:
+        return False
 
 
-def get_addr_cipher(liteaddr: str, key_json: str):
-    with open(key_json, 'r') as readfile:
+def get_addr_cipher(liteaddr: str, key_file: str):
+    with open(key_file, 'r') as readfile:
         keys = json.load(readfile)
     if not liteaddr in keys:
         return False
